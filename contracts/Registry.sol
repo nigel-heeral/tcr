@@ -24,6 +24,7 @@ contract Registry {
     event _ChallengeSucceeded(bytes32 indexed listingHash, uint indexed challengeID, uint rewardPool, uint totalTokens);
     event _RewardClaimed(uint indexed challengeID, uint reward, address indexed voter);
     event _ExitInitialized(bytes32 indexed listingHash, uint exitTime);
+    event _CanceledExit(bytes32 indexed listingHash);
 
     using SafeMath for uint;
 
@@ -190,7 +191,7 @@ contract Registry {
 	Listing storage listing = listings[_listingHash];
 
 	require(msg.sender == listing.owner);
-	//require(isWhitelisted(_listingHash));
+	require(isWhitelisted(_listingHash));
 
 	// Cannot exit during ongoing challenge
 	require(listing.challengeID == 0 || challenges[listing.challengeID].resolved);
@@ -204,7 +205,20 @@ contract Registry {
 	resetListing(_listingHash);
 	emit _ListingWithdrawn(_listingHash);
     }
+    
+    function cancelExit(bytes32 _listingHash) external{
+	Listing storage listing = listings[_listingHash];
 
+	require(msg.sender == listing.owner);
+	require(isWhitelisted(_listingHash));
+        //need to consider letting them cancel exit if challenge is != to 0
+        require(listing.exitTime > 0 && listing.exitTime > block.timestamp);
+         
+	//reset the time which means they canceled the exit process
+	listing.exitTime = 0;
+	emit _CanceledExit(_listingHash);
+
+    }
     // -----------------------
     // TOKEN HOLDER INTERFACE:
     // -----------------------

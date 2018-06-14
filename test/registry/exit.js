@@ -180,6 +180,118 @@ contract('Registry', (accounts) => {
       );
     });
 
+    it('should allow a listing to cancel the  exit process', async () => {
+      const registry = await Registry.deployed();
+      const token = Token.at(await registry.token.call());
+      const listing = utils.getListingHash('juul.com');
+
+      const initialApplicantTokenHoldings = await token.balanceOf.call(applicant);
+
+      await utils.addToWhitelist(listing, paramConfig.minDeposit, applicant);
+
+      const isWhitelisted = await registry.isWhitelisted.call(listing);
+      assert.strictEqual(isWhitelisted, true, 'the listing was not added to the registry');
+      await registry.initExit(listing, { from: applicant });
+      await registry.cancelExit(listing, { from: applicant });
+
+      const isWhitelistedAfterExit = await registry.isWhitelisted.call(listing);
+      assert.strictEqual(isWhitelistedAfterExit, true, 'the cancellation was not able to  process');
+      const finalApplicantTokenHoldings = await token.balanceOf.call(applicant);
+      assert(
+        initialApplicantTokenHoldings.gt(finalApplicantTokenHoldings),
+        'the applicant\'s tokens were returned in spite of failing to exit',
+      );
+    });
+
+    it('should not cancel the exit process if you did not initialize', async () => {
+      const registry = await Registry.deployed();
+      const listing = utils.getListingHash('canihityourjuulplz.com');
+
+      await utils.addToWhitelist(listing, paramConfig.minDeposit, applicant);
+      try {
+        await registry.cancelExit(listing, { from: applicant });
+        assert(false, 'exit cancel when it should have failed');
+      } catch (err) {
+        const errMsg = err.toString();
+        assert(utils.isEVMException(err), errMsg);
+      }
+      const isWhitelistedAfterExit = await registry.isWhitelisted.call(listing);
+      assert.strictEqual(
+        isWhitelistedAfterExit,
+        true,
+        'the listing was initialized by someone other than its owner',
+      );
+    });
+
+
+    it('should not cancel the exit process if already exited', async () => {
+      const registry = await Registry.deployed();
+      const listing = utils.getListingHash('canihityourjuulplzbroplz.com');
+
+      await utils.addToWhitelist(listing, paramConfig.minDeposit, applicant);
+      await registry.initExit(listing, { from: applicant });
+      await utils.increaseTime(paramConfig.exitTimeDelay + 1);
+      await registry.finalizeExit(listing, { from: applicant });
+      try {
+        await registry.cancelExit(listing, { from: applicant });
+        assert(false, 'exit cancel when it should have failed due to already exiting');
+      } catch (err) {
+        const errMsg = err.toString();
+        assert(utils.isEVMException(err), errMsg);
+      }
+      const isWhitelistedAfterExit = await registry.isWhitelisted.call(listing);
+      assert.strictEqual(
+        isWhitelistedAfterExit,
+        false,
+        'the listing remained whitelisted when they should have exited',
+      );
+    });
+
+    it('should not cancel the exit process by someone who doesn\'t own the listing', async () => {
+      const registry = await Registry.deployed();
+      const listing = utils.getListingHash('plznomoretests.com');
+
+      await utils.addToWhitelist(listing, paramConfig.minDeposit, applicant);
+      await registry.initExit(listing, { from: applicant });
+      try {
+        await registry.cancelExit(listing, { from: voter });
+        assert(false, 'exit canceled when it should have failed due to wrong ownership');
+      } catch (err) {
+        const errMsg = err.toString();
+        assert(utils.isEVMException(err), errMsg);
+      }
+      const isWhitelistedAfterExit = await registry.isWhitelisted.call(listing);
+      assert.strictEqual(
+        isWhitelistedAfterExit,
+        true,
+        'the listing is not on the whitelist when they did not successfully exit the whitelist',
+      );
+    });
+
+
+    it('should not cancel the exit process if exit time is over', async () => {
+      const registry = await Registry.deployed();
+      const listing = utils.getListingHash('plzbelasttest.com');
+
+      await utils.addToWhitelist(listing, paramConfig.minDeposit, applicant);
+      await registry.initExit(listing, { from: applicant });
+      await utils.increaseTime(paramConfig.exitTimeDelay + 1);
+      try {
+        await registry.cancelExit(listing, { from: applicant });
+        assert(false, 'exit canceled when it should have failed due to time being up');
+      } catch (err) {
+        const errMsg = err.toString();
+        assert(utils.isEVMException(err), errMsg);
+      }
+      const isWhitelistedAfterExit = await registry.isWhitelisted.call(listing);
+      assert.strictEqual(
+        isWhitelistedAfterExit,
+        true,
+        'the listing is not on the whitelist when they did not successfully exit the whitelist',
+      );
+    });
+
+
     it('should revert if listing is in application stage', async () => {
       const registry = await Registry.deployed();
       const listing = utils.getListingHash('nogoodnames.com');
